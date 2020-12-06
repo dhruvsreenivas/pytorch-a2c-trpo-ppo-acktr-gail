@@ -1,18 +1,12 @@
 import numpy as np
 import torch
 
-from a2c_ppo_acktr import utils
 from a2c_ppo_acktr.envs import make_vec_envs
 
 
 def evaluate(actor_critic, env_name, seed, num_processes, eval_log_dir, device):
     eval_envs = make_vec_envs(env_name, seed + num_processes, num_processes,
                               None, eval_log_dir, device, True)
-
-    # vec_norm = utils.get_vec_normalize(eval_envs)
-    # # if vec_norm is not None:
-    # #     vec_norm.eval()
-    # #     vec_norm.ob_rms = ob_rms
 
     eval_episode_rewards = []
 
@@ -29,7 +23,7 @@ def evaluate(actor_critic, env_name, seed, num_processes, eval_log_dir, device):
                 eval_masks,
                 deterministic=True)
 
-        # Obser reward and next obs
+        # Observation reward and next observation
         obs, _, done, infos = eval_envs.step(action)
 
         eval_masks = torch.tensor(

@@ -22,12 +22,12 @@ def conjugate_gradients(Avp, b, nsteps, residual_tol=1e-10):
     return x
 
 
-def backtracking_line_search(model, f, fullstep, expected_improve_rate, max_backtracks=10, accept_ratio=.1):
+def backtracking_line_search(model, f, full_step, expected_improve_rate, max_backtracks=10, accept_ratio=.1):
     prev_parameters = model.flat_actor_parameters()
     with torch.no_grad():
         initial_f_value = f()
     for step_frac in .5**torch.arange(max_backtracks):
-        new_parameters = prev_parameters + step_frac * fullstep
+        new_parameters = prev_parameters + step_frac * full_step
         model.set_flat_actor_parameters(new_parameters)
         with torch.no_grad():
             new_f_value = f()
@@ -67,10 +67,10 @@ def trpo_step(model, get_loss, get_kl, max_kl, damping):
     lm = torch.sqrt(shs / max_kl)
     full_step = step_dir / lm[0]
 
-    neggdotstepdir = (-loss_grad * step_dir).sum(0, keepdim=True)
+    neg_dot_step_dir = (-loss_grad * step_dir).sum(0, keepdim=True)
     #print(("lagrange multiplier:", lm[0], "grad_norm:", loss_grad.norm()))
 
-    backtracking_line_search(model, get_loss, full_step, neggdotstepdir / lm[0])
+    backtracking_line_search(model, get_loss, full_step, neg_dot_step_dir / lm[0])
 
     return loss
 

@@ -121,7 +121,6 @@ def main():
 
             if args.render:
                 utils.get_render_func(envs)()
-                # envs.render()
 
         with torch.no_grad():
             next_value = actor_critic.get_value(rollouts.obs[-1],

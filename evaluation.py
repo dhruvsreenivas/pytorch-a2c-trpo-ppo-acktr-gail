@@ -1,18 +1,16 @@
 import numpy as np
 import torch
-
+from a2c_ppo_acktr.utils import get_render_func
 from a2c_ppo_acktr.envs import make_vec_envs
 
 
-def evaluate(actor_critic, env_name, seed, num_processes, eval_log_dir, device):
-    eval_envs = make_vec_envs(env_name, seed + num_processes, num_processes,
-                              None, eval_log_dir, device, True)
+def evaluate(actor_critic, env_name, seed, num_processes, eval_log_dir, device, render=False):
+    eval_envs = make_vec_envs(env_name, seed + num_processes, num_processes, None, eval_log_dir, device, True)
 
     eval_episode_rewards = []
 
     obs = eval_envs.reset()
-    eval_recurrent_hidden_states = torch.zeros(
-        num_processes, actor_critic.recurrent_hidden_state_size, device=device)
+    eval_recurrent_hidden_states = torch.zeros(num_processes, actor_critic.recurrent_hidden_state_size, device=device)
     eval_masks = torch.zeros(num_processes, 1, device=device)
 
     while len(eval_episode_rewards) < 10:
@@ -34,6 +32,9 @@ def evaluate(actor_critic, env_name, seed, num_processes, eval_log_dir, device):
         for info in infos:
             if 'episode' in info.keys():
                 eval_episode_rewards.append(info['episode']['r'])
+
+        if render:
+            get_render_func(eval_envs)()
 
     eval_envs.close()
 

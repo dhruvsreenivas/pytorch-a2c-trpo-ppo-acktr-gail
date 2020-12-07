@@ -6,7 +6,7 @@ from abc import ABC
 
 import torch
 import torch.nn as nn
-from a2c_ppo_acktr.utils import AddBias, init
+from a2c_trpo_ppo_acktr.utils import AddBias, init
 
 
 class FixedCategorical(torch.distributions.Categorical, ABC):

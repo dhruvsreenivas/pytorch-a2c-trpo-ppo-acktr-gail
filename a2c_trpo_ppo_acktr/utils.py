@@ -4,7 +4,7 @@ import os
 import torch
 import torch.nn as nn
 
-from a2c_ppo_acktr.envs import ShmemVecEnv
+from a2c_trpo_ppo_acktr.envs import ShmemVecEnv
 from baselines.common.vec_env.vec_normalize import VecNormalize
 
 

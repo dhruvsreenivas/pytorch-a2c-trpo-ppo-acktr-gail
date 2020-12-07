@@ -33,6 +33,13 @@ def get_args():
                         help='value loss coefficient (default: 0.5)')
     parser.add_argument('--max-grad-norm', type=float, default=0.5,
                         help='max norm of gradients (default: 0.5)')
+    parser.add_argument('--damping', type=float, default=1e-3,
+                        help='damping beta used to control the improvement in trpo (default=1e-3)')
+    parser.add_argument('--value-l2-reg', type=float, default=1e-3,
+                        help='L2 regularization for the value network (default=1e-3)')
+    parser.add_argument('--max-kl', type=float, default=1e-3,
+                        help='maximum kl-divergence of the original policy from the improved version in trpo'
+                        ' (default=1e-3)')
     parser.add_argument('--seed', type=int, default=1,
                         help='random seed (default: 1)')
     parser.add_argument('--cuda-deterministic', action='store_true', default=False,

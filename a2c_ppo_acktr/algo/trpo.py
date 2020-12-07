@@ -43,38 +43,6 @@ def backtracking_line_search(model, f, full_step, expected_improve_rate, max_bac
     model.set_flat_actor_parameters(prev_parameters)
 
 
-def trpo_step(model, get_loss, get_kl, max_kl, damping):
-    loss = get_loss()
-    grads = torch.autograd.grad(loss, model.actor_parameters(), retain_graph=True)
-    loss_grad = torch.cat([grad.view(-1) for grad in grads]).data
-
-    def Fvp(v):
-        kl = get_kl().mean()
-
-        grads = torch.autograd.grad(kl, model.actor_parameters(), create_graph=True, retain_graph=True)
-        flat_grad_kl = torch.cat([grad.view(-1) for grad in grads])
-
-        kl_v = (flat_grad_kl * v).sum()
-        grads = torch.autograd.grad(kl_v, model.actor_parameters(), retain_graph=True)
-        flat_grad_grad_kl = torch.cat([grad.contiguous().view(-1) for grad in grads]).data
-
-        return flat_grad_grad_kl + v * damping
-
-    step_dir = conjugate_gradients(Fvp, -loss_grad, 10)
-
-    shs = 0.5 * (step_dir * Fvp(step_dir)).sum(0, keepdim=True)
-
-    lm = torch.sqrt(shs / max_kl)
-    full_step = step_dir / lm[0]
-
-    neg_dot_step_dir = (-loss_grad * step_dir).sum(0, keepdim=True)
-    #print(("lagrange multiplier:", lm[0], "grad_norm:", loss_grad.norm()))
-
-    backtracking_line_search(model, get_loss, full_step, neg_dot_step_dir / lm[0])
-
-    return loss
-
-
 class TRPO:
     def __init__(self,
                  actor_critic: nn.Module,
@@ -128,7 +96,7 @@ class TRPO:
             self.actor_critic.actor_requires_grad(True)
             self.actor_critic.critic_requires_grad(False)
 
-            # Policy Loss
+            # Policy Loss calculation and TRPO step:====================================================================
             def get_policy_loss():
                 _, action_log_probs, _, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
@@ -140,7 +108,41 @@ class TRPO:
             def get_kl():
                 current_policy = self.actor_critic.dist_layer.dist
                 return torch.distributions.kl_divergence(current_policy, prev_policy)
-            action_loss += trpo_step(self.actor_critic, get_policy_loss, get_kl, self.max_kl, self.damping).item()
+
+            current_action_loss = get_policy_loss()
+            action_loss_grad = torch.autograd.grad(current_action_loss,
+                                                   self.actor_critic.actor_parameters(),
+                                                   retain_graph=True)
+            action_loss_grad = torch.cat([grad.view(-1) for grad in action_loss_grad]).detach()
+
+            def sample_mean_kl_div_hessian(v):
+                kl = get_kl().mean()
+
+                grads = torch.autograd.grad(kl,
+                                            self.actor_critic.actor_parameters(),
+                                            create_graph=True,
+                                            retain_graph=True)
+                flat_grad_kl = torch.cat([grad.view(-1) for grad in grads])
+
+                kl_v = (flat_grad_kl * v).sum()
+                grads = torch.autograd.grad(kl_v, self.actor_critic.actor_parameters(), retain_graph=True)
+                flat_grad_grad_kl = torch.cat([grad.contiguous().view(-1) for grad in grads]).detach()
+
+                return flat_grad_grad_kl + v * self.damping
+
+            step_dir = conjugate_gradients(sample_mean_kl_div_hessian, -action_loss_grad, 10)
+
+            shs = 0.5 * (step_dir * sample_mean_kl_div_hessian(step_dir)).sum(0, keepdim=True)
+
+            lm = torch.sqrt(shs / self.max_kl)
+            full_step = step_dir / lm[0]
+
+            neg_dot_step_dir = (-action_loss_grad * step_dir).sum(0, keepdim=True)
+            # print(("lagrange multiplier:", lm[0], "grad_norm:", loss_grad.norm()))
+
+            backtracking_line_search(self.actor_critic, get_policy_loss, full_step, neg_dot_step_dir / lm[0])
+
+            action_loss += current_action_loss
 
             value_loss += value_loss.item()
             dist_entropy += dist_entropy.item()

@@ -5,12 +5,12 @@ from collections import deque
 import numpy as np
 import torch
 
-from a2c_ppo_acktr import algo, utils
-from a2c_ppo_acktr.algo import gail
-from a2c_ppo_acktr.arguments import get_args
-from a2c_ppo_acktr.envs import make_vec_envs
-from a2c_ppo_acktr.model import Policy
-from a2c_ppo_acktr.storage import RolloutStorage
+from a2c_trpo_ppo_acktr import algo, utils
+from a2c_trpo_ppo_acktr.algo import gail
+from a2c_trpo_ppo_acktr.arguments import get_args
+from a2c_trpo_ppo_acktr.envs import make_vec_envs
+from a2c_trpo_ppo_acktr.model import Policy
+from a2c_trpo_ppo_acktr.storage import RolloutStorage
 from evaluation import evaluate
 
 
@@ -60,7 +60,10 @@ def main():
         agent = algo.TRPO(actor_critic,
                           args.num_steps * args.num_processes,
                           lr=args.lr,
-                          eps=args.eps)
+                          eps=args.eps,
+                          l2_reg=args.value_l2_reg,
+                          max_kl=args.max_kl,
+                          damping=args.damping)
     elif args.algo == 'acktr':
         agent = algo.A2C_ACKTR(actor_critic,
                                args.value_loss_coef,
@@ -72,8 +75,7 @@ def main():
         discr = gail.Discriminator(envs.observation_space.shape[0] + envs.action_space.shape[0], 100, device)
         file_name = os.path.join(args.gail_experts_dir, "trajs_{}.pt".format(args.env_name.split('-')[0].lower()))
 
-        expert_dataset = gail.ExpertDataset(
-            file_name, num_trajectories=4, subsample_frequency=20)
+        expert_dataset = gail.ExpertDataset(file_name, num_trajectories=4, subsample_frequency=20)
         drop_last = len(expert_dataset) > args.gail_batch_size
         gail_train_loader = torch.utils.data.DataLoader(
             dataset=expert_dataset,

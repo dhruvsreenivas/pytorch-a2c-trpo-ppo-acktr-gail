@@ -1,7 +1,7 @@
 import numpy as np
 import torch
-from a2c_ppo_acktr.utils import get_render_func
-from a2c_ppo_acktr.envs import make_vec_envs
+from a2c_trpo_ppo_acktr.utils import get_render_func
+from a2c_trpo_ppo_acktr.envs import make_vec_envs
 
 
 def evaluate(actor_critic, env_name, seed, num_processes, eval_log_dir, device, render=False):

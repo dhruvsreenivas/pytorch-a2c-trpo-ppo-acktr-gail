@@ -3,12 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def conjugate_gradients(Avp, b, nsteps, residual_tol=1e-10):
+def conjugate_gradients(Avp, b, n_steps, residual_tol=1e-10):
     x = torch.zeros_like(b)
     r = b.clone()
     p = b.clone()
     rdotr = torch.dot(r, r)
-    for i in range(nsteps):
+    for i in range(n_steps):
         _Avp = Avp(p)
         alpha = rdotr / torch.dot(p, _Avp)
         x += alpha * p
@@ -34,10 +34,8 @@ def backtracking_line_search(model, f, full_step, expected_improve_rate, max_bac
         actual_improve = initial_f_value - new_f_value
         expected_improve = expected_improve_rate * step_frac
         ratio = actual_improve / expected_improve
-        #print("a/e/r", actual_improve.item(), expected_improve.item(), ratio.item())
 
         if ratio.item() > accept_ratio and actual_improve.item() > 0:
-            #print("fval after", newfval.item())
             model.set_flat_actor_parameters(new_parameters)
             return
     model.set_flat_actor_parameters(prev_parameters)
@@ -138,7 +136,6 @@ class TRPO:
             full_step = step_dir / lm[0]
 
             neg_dot_step_dir = (-action_loss_grad * step_dir).sum(0, keepdim=True)
-            # print(("lagrange multiplier:", lm[0], "grad_norm:", loss_grad.norm()))
 
             backtracking_line_search(self.actor_critic, get_policy_loss, full_step, neg_dot_step_dir / lm[0])
 

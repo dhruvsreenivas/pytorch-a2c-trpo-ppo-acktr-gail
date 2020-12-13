@@ -77,11 +77,10 @@ def main():
 
         expert_dataset = gail.ExpertDataset(file_name, num_trajectories=4, subsample_frequency=20)
         drop_last = len(expert_dataset) > args.gail_batch_size
-        gail_train_loader = torch.utils.data.DataLoader(
-            dataset=expert_dataset,
-            batch_size=args.gail_batch_size,
-            shuffle=True,
-            drop_last=drop_last)
+        gail_train_loader = torch.utils.data.DataLoader(dataset=expert_dataset,
+                                                        batch_size=args.gail_batch_size,
+                                                        shuffle=True,
+                                                        drop_last=drop_last)
 
     rollouts = RolloutStorage(args.num_steps, args.num_processes,
                               envs.observation_space.shape, envs.action_space,

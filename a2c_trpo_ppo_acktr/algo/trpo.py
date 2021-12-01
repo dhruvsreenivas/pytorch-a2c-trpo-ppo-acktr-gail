@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from low_precision_utils import *
 
 
 def conjugate_gradients(Avp, b, n_steps, residual_tol=1e-10):
@@ -49,7 +50,8 @@ class TRPO:
                  eps,
                  l2_reg=1e-2,
                  max_kl=1e-4,
-                 damping=1e-3):
+                 damping=1e-3,
+                 use_hadam=False):
         self.actor_critic = actor_critic
 
         self.batch_size = batch_size
@@ -57,21 +59,28 @@ class TRPO:
         self.max_kl = max_kl
         self.damping = damping
 
-        self.optimizer = torch.optim.Adam(actor_critic.base.critic.parameters(), lr=lr, eps=eps, weight_decay=l2_reg)
+        if use_hadam:
+            self.optimizer = hAdam(
+                actor_critic.base.critic.parameters(), lr=lr, eps=eps, weight_decay=l2_reg)
+        self.optimizer = torch.optim.Adam(
+            actor_critic.base.critic.parameters(), lr=lr, eps=eps, weight_decay=l2_reg)
 
     def update(self, rollouts):
 
         advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-5)
+        advantages = (advantages - advantages.mean()) / \
+            (advantages.std() + 1e-5)
 
         value_loss = 0
         action_loss = 0
         dist_entropy = 0
 
         if self.actor_critic.is_recurrent:
-            data_generator = rollouts.recurrent_generator(advantages, 1, self.batch_size)
+            data_generator = rollouts.recurrent_generator(
+                advantages, 1, self.batch_size)
         else:
-            data_generator = rollouts.feed_forward_generator(advantages, 1, self.batch_size)
+            data_generator = rollouts.feed_forward_generator(
+                advantages, 1, self.batch_size)
 
         for sample in data_generator:
             obs_batch, recurrent_hidden_states_batch, actions_batch, value_preds_batch, \
@@ -80,7 +89,8 @@ class TRPO:
             # Reshape to do in a single forward pass for all steps
             self.actor_critic.actor_requires_grad(False)
             self.actor_critic.critic_requires_grad(True)
-            values = self.actor_critic.get_value(obs_batch, recurrent_hidden_states_batch, masks_batch)
+            values = self.actor_critic.get_value(
+                obs_batch, recurrent_hidden_states_batch, masks_batch)
 
             # Value Loss calculation and value network optimization:====================================================
             self.optimizer.zero_grad()
@@ -98,7 +108,8 @@ class TRPO:
             def get_policy_loss():
                 _, action_log_probs, _, _ = self.actor_critic.evaluate_actions(
                     obs_batch, recurrent_hidden_states_batch, masks_batch, actions_batch)
-                action_loss = - adv_targ * torch.exp(action_log_probs - old_action_log_probs_batch)
+                action_loss = - adv_targ * \
+                    torch.exp(action_log_probs - old_action_log_probs_batch)
                 return action_loss.mean()
 
             prev_policy = self.actor_critic.dist_layer.dist
@@ -111,7 +122,8 @@ class TRPO:
             action_loss_grad = torch.autograd.grad(current_action_loss,
                                                    self.actor_critic.actor_parameters(),
                                                    retain_graph=True)
-            action_loss_grad = torch.cat([grad.view(-1) for grad in action_loss_grad]).detach()
+            action_loss_grad = torch.cat(
+                [grad.view(-1) for grad in action_loss_grad]).detach()
 
             def sample_mean_kl_div_hessian(v):
                 kl = get_kl().mean()
@@ -123,21 +135,27 @@ class TRPO:
                 flat_grad_kl = torch.cat([grad.view(-1) for grad in grads])
 
                 kl_v = (flat_grad_kl * v).sum()
-                grads = torch.autograd.grad(kl_v, self.actor_critic.actor_parameters(), retain_graph=True)
-                flat_grad_grad_kl = torch.cat([grad.contiguous().view(-1) for grad in grads]).detach()
+                grads = torch.autograd.grad(
+                    kl_v, self.actor_critic.actor_parameters(), retain_graph=True)
+                flat_grad_grad_kl = torch.cat(
+                    [grad.contiguous().view(-1) for grad in grads]).detach()
 
                 return flat_grad_grad_kl + v * self.damping
 
-            step_dir = conjugate_gradients(sample_mean_kl_div_hessian, -action_loss_grad, 10)
+            step_dir = conjugate_gradients(
+                sample_mean_kl_div_hessian, -action_loss_grad, 10)
 
-            shs = 0.5 * (step_dir * sample_mean_kl_div_hessian(step_dir)).sum(0, keepdim=True)
+            shs = 0.5 * \
+                (step_dir * sample_mean_kl_div_hessian(step_dir)).sum(0, keepdim=True)
 
             lm = torch.sqrt(shs / self.max_kl)
             full_step = step_dir / lm[0]
 
-            neg_dot_step_dir = (-action_loss_grad * step_dir).sum(0, keepdim=True)
+            neg_dot_step_dir = (-action_loss_grad *
+                                step_dir).sum(0, keepdim=True)
 
-            backtracking_line_search(self.actor_critic, get_policy_loss, full_step, neg_dot_step_dir / lm[0])
+            backtracking_line_search(
+                self.actor_critic, get_policy_loss, full_step, neg_dot_step_dir / lm[0])
 
             action_loss += current_action_loss
 

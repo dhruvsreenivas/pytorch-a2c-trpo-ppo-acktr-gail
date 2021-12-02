@@ -37,10 +37,11 @@ def main():
 
     actor_critic = Policy(envs.observation_space.shape, envs.action_space,
                           base_kwargs={'recurrent': args.recurrent_policy})
-    actor_critic.to(device)
 
     if args.precision == 'half':
         actor_critic.half()
+
+    actor_critic.to(device)
 
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(actor_critic,
@@ -95,6 +96,8 @@ def main():
                               actor_critic.recurrent_hidden_state_size)
 
     obs = envs.reset()
+    if args.precision == 'half':
+        obs = obs.half()
     rollouts.obs[0].copy_(obs)
     rollouts.to(device)
 
@@ -117,8 +120,15 @@ def main():
                     rollouts.obs[step], rollouts.recurrent_hidden_states[step],
                     rollouts.masks[step])
 
+                if args.precision == 'half':
+                    value = value.half()
+                    action_log_prob = action_log_prob.half()
+                    recurrent_hidden_states = recurrent_hidden_states.half()
+
             # Observation reward and next obs
             obs, reward, done, infos = envs.step(action)
+            if args.precision == 'half':
+                obs = obs.half()
 
             for info in infos:
                 if 'episode' in info.keys():

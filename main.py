@@ -32,11 +32,15 @@ def main():
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
-    envs = make_vec_envs(args.env_name, args.seed, args.num_processes, args.gamma, args.log_dir, device, False)
+    envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
+                         args.gamma, args.log_dir, device, False)
 
     actor_critic = Policy(envs.observation_space.shape, envs.action_space,
                           base_kwargs={'recurrent': args.recurrent_policy})
     actor_critic.to(device)
+
+    if args.precision == 'half':
+        actor_critic.half()
 
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(actor_critic,
@@ -63,7 +67,8 @@ def main():
                           eps=args.eps,
                           l2_reg=args.value_l2_reg,
                           max_kl=args.max_kl,
-                          damping=args.damping)
+                          damping=args.damping,
+                          use_hadam=args.use_hadam)
     elif args.algo == 'acktr':
         agent = algo.A2C_ACKTR(actor_critic,
                                args.value_loss_coef,
@@ -72,10 +77,13 @@ def main():
 
     if args.gail:
         assert len(envs.observation_space.shape) == 1
-        discr = gail.Discriminator(envs.observation_space.shape[0] + envs.action_space.shape[0], 100, device)
-        file_name = os.path.join(args.gail_experts_dir, "trajs_{}.pt".format(args.env_name.split('-')[0].lower()))
+        discr = gail.Discriminator(
+            envs.observation_space.shape[0] + envs.action_space.shape[0], 100, device)
+        file_name = os.path.join(args.gail_experts_dir, "trajs_{}.pt".format(
+            args.env_name.split('-')[0].lower()))
 
-        expert_dataset = gail.ExpertDataset(file_name, num_trajectories=4, subsample_frequency=20)
+        expert_dataset = gail.ExpertDataset(
+            file_name, num_trajectories=4, subsample_frequency=20)
         drop_last = len(expert_dataset) > args.gail_batch_size
         gail_train_loader = torch.utils.data.DataLoader(dataset=expert_dataset,
                                                         batch_size=args.gail_batch_size,
@@ -93,7 +101,8 @@ def main():
     episode_rewards = deque(maxlen=10)
 
     start = time.time()
-    num_updates = int(args.num_env_steps) // args.num_steps // args.num_processes
+    num_updates = int(
+        args.num_env_steps) // args.num_steps // args.num_processes
     for j in range(num_updates):
 
         if args.use_linear_lr_decay:
@@ -116,9 +125,12 @@ def main():
                     episode_rewards.append(info['episode']['r'])
 
             # If done then clean the history of observations.
-            masks = torch.FloatTensor([[0.0] if done_ else [1.0] for done_ in done])
-            bad_masks = torch.FloatTensor([[0.0] if 'bad_transition' in info.keys() else [1.0] for info in infos])
-            rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks, bad_masks)
+            masks = torch.FloatTensor(
+                [[0.0] if done_ else [1.0] for done_ in done])
+            bad_masks = torch.FloatTensor(
+                [[0.0] if 'bad_transition' in info.keys() else [1.0] for info in infos])
+            rollouts.insert(obs, recurrent_hidden_states, action,
+                            action_log_prob, value, reward, masks, bad_masks)
 
             if args.render:
                 utils.get_render_func(envs)()
@@ -136,13 +148,15 @@ def main():
             if j < 10:
                 gail_epoch = 100  # Warm up
             for _ in range(gail_epoch):
-                discr.update(gail_train_loader, rollouts, utils.get_vec_normalize(envs)._obfilt)
+                discr.update(gail_train_loader, rollouts,
+                             utils.get_vec_normalize(envs)._obfilt)
 
             for step in range(args.num_steps):
                 rollouts.rewards[step] = discr.predict_reward(rollouts.obs[step], rollouts.actions[step], args.gamma,
                                                               rollouts.masks[step])
 
-        rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.gae_lambda, args.use_proper_time_limits)
+        rollouts.compute_returns(
+            next_value, args.use_gae, args.gamma, args.gae_lambda, args.use_proper_time_limits)
 
         value_loss, action_loss, dist_entropy = agent.update(rollouts)
 
@@ -170,7 +184,8 @@ def main():
                   f"entropy: {dist_entropy}, value loss: {value_loss}, action loss: {action_loss}")
 
         if args.eval_interval is not None and len(episode_rewards) > 1 and j % args.eval_interval == 0:
-            evaluate(actor_critic, args.env_name, args.seed, args.num_processes, eval_log_dir, device)
+            evaluate(actor_critic, args.env_name, args.seed,
+                     args.num_processes, eval_log_dir, device)
 
 
 if __name__ == "__main__":

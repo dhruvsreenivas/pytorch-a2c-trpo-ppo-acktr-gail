@@ -4,7 +4,8 @@ import torch
 
 
 def get_args():
-    parser = argparse.ArgumentParser(description='Policy-optimization methods with Pytorch')
+    parser = argparse.ArgumentParser(
+        description='Policy-optimization methods with Pytorch')
     parser.add_argument('--algo', default='ppo',
                         help='algorithm to use: a2c | ppo | acktr | trpo')
     parser.add_argument('--gail', action='store_true', default=False,
@@ -79,12 +80,21 @@ def get_args():
                         help='use a linear schedule on the learning rate')
     parser.add_argument('--render', action='store_true',
                         help='render the environment')
+
+    # Low-precision args for TRPO/precision args in general
+    parser.add_argument('--precision',
+                        default='half',
+                        choices=['half', 'full', 'double'],
+                        help='precision for runs')
+    parser.add_argument('--use-hadam', action='store_true',
+                        help='use hAdam optimizer for TRPO')
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
 
     assert args.algo in ['a2c', 'ppo', 'acktr', 'trpo']
     if args.recurrent_policy:
-        assert args.algo in ['a2c', 'ppo', 'trpo'], 'Recurrent policy is not implemented for ACKTR'
+        assert args.algo in [
+            'a2c', 'ppo', 'trpo'], 'Recurrent policy is not implemented for ACKTR'
 
     return args
